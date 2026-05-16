@@ -1,0 +1,14 @@
+work_dir: /tmp/domino
+
+ctx:
+  work_dir: ${work_dir}
+
+workflow:
+  func1:
+    callable: "examples/steps.py:make_base"
+    kwargs: {}
+    return_key: null
+  func2:
+    callable: "examples/steps.py:split_base"
+    kwargs: {}
+    return_key: ["base", "length"]

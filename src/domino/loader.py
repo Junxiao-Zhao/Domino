@@ -1,0 +1,69 @@
+from __future__ import annotations
+
+import hashlib
+import importlib
+import importlib.util
+from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+from domino.exceptions import DominoLoadError
+
+
+def load_callable(spec: str) -> Any:
+    if ":" not in spec:
+        raise DominoLoadError(f"Callable spec '{spec}' must use 'module:func' format.")
+
+    module_name, func_name = spec.split(":", 1)
+    if not module_name or not func_name:
+        raise DominoLoadError(f"Callable spec '{spec}' must use 'module:func' format.")
+
+    module = _load_module(module_name, spec)
+
+    try:
+        target = getattr(module, func_name)
+    except AttributeError as exc:
+        raise DominoLoadError(
+            f"Callable spec '{spec}' references missing function '{func_name}'."
+        ) from exc
+
+    if not callable(target):
+        raise DominoLoadError(
+            f"Callable spec '{spec}' resolved target is not callable."
+        )
+
+    return target
+
+
+def _load_module(module_name: str, spec: str) -> ModuleType:
+    path = Path(module_name)
+    if not path.is_absolute():
+        path = Path.cwd() / path
+
+    if path.exists() and path.suffix == ".py":
+        return _load_module_from_path(path, spec)
+
+    try:
+        return importlib.import_module(module_name)
+    except Exception as exc:
+        raise DominoLoadError(
+            f"Could not import module for callable spec '{spec}'."
+        ) from exc
+
+
+def _load_module_from_path(path: Path, spec: str) -> ModuleType:
+    resolved_path = path.resolve()
+    digest = hashlib.sha1(str(resolved_path).encode("utf-8")).hexdigest()[:12]
+    synthetic_name = f"_domino_loaded_{resolved_path.stem}_{digest}"
+    module_spec = importlib.util.spec_from_file_location(synthetic_name, resolved_path)
+    if module_spec is None or module_spec.loader is None:
+        raise DominoLoadError(f"Could not load module from callable spec '{spec}'.")
+
+    module = importlib.util.module_from_spec(module_spec)
+    try:
+        module_spec.loader.exec_module(module)
+    except Exception as exc:
+        raise DominoLoadError(
+            f"Could not execute module for callable spec '{spec}'."
+        ) from exc
+    return module
