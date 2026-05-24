@@ -28,19 +28,19 @@ def test_build_step_kwargs_prefers_config_kwargs_over_ctx():
     }
 
 
-def test_build_step_kwargs_uses_none_for_missing_values():
-    assert build_step_kwargs(sample, {}, {}) == {
-        "a": None,
-        "b": None,
-        "c": None,
-        "d": None,
-    }
+def test_build_step_kwargs_omits_missing_values():
+    assert build_step_kwargs(sample, {}, {}) == {}
 
 
 def test_build_step_kwargs_ignores_variadic_parameters():
     assert build_step_kwargs(with_variadic, {"a": 1, "args": 2}, {"kwargs": 3}) == {
-        "a": 1
+        "a": 1,
+        "kwargs": 3,
     }
+
+
+def test_build_step_kwargs_keeps_explicit_kwargs_not_in_signature():
+    assert build_step_kwargs(sample, {}, {"extra": "value"}) == {"extra": "value"}
 
 
 def test_build_step_kwargs_passes_full_context_for_ctx_parameter():
@@ -82,17 +82,17 @@ def test_store_result_uses_string_return_key():
     assert ctx == {"answer": 123}
 
 
-def test_store_result_splits_tuple_across_return_key_list():
+def test_store_result_splits_sequence_across_return_key_list():
     ctx = {}
 
-    store_result(ctx, "step", ("left", "right"), ["a", "b"])
+    store_result(ctx, "step", ["left", "right"], ["a", "b"])
 
     assert ctx == {"a": "left", "b": "right"}
 
 
-def test_store_result_rejects_list_key_for_non_tuple_result():
-    with pytest.raises(DominoConfigError, match="must return a tuple"):
-        store_result({}, "step", ["not", "tuple"], ["a", "b"])
+def test_store_result_rejects_list_key_for_non_sequence_result():
+    with pytest.raises(DominoConfigError, match="must return a sequence"):
+        store_result({}, "step", object(), ["a", "b"])
 
 
 def test_store_result_rejects_list_key_length_mismatch():

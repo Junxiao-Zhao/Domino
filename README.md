@@ -35,6 +35,8 @@ workflow:
 ```
 
 Step function parameters are resolved from step `kwargs` first, then `ctx`.
-Missing values are passed as `None`.
+All step `kwargs` are passed through to the function; `ctx` only fills missing
+signature parameters.
+Parameters missing from both step `kwargs` and `ctx` are omitted.
 If a step declares a parameter named `ctx`, `domino` passes the whole context unless
 the step explicitly sets `kwargs.ctx`.

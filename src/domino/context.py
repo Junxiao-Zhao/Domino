@@ -14,7 +14,7 @@ def build_step_kwargs(
 ) -> dict[str, Any]:
     explicit_kwargs = dict(kwargs or {})
     signature = inspect.signature(func)
-    resolved: dict[str, Any] = {}
+    resolved: dict[str, Any] = dict(explicit_kwargs)
 
     for name, parameter in signature.parameters.items():
         if parameter.kind in (
@@ -23,14 +23,12 @@ def build_step_kwargs(
         ):
             continue
 
-        if name in explicit_kwargs:
-            resolved[name] = explicit_kwargs[name]
+        if name in resolved:
+            continue
         elif name == "ctx":
             resolved[name] = ctx
         elif name in ctx:
             resolved[name] = ctx[name]
-        else:
-            resolved[name] = None
 
     return resolved
 
@@ -53,9 +51,9 @@ def store_result(
         return
 
     if isinstance(return_key, Sequence):
-        if not isinstance(result, tuple):
+        if not isinstance(result, Sequence):
             raise DominoConfigError(
-                f"Step '{step_name}' must return a tuple when return_key is a list."
+                f"Step '{step_name}' must return a sequence when return_key is a list."
             )
         if len(result) != len(return_key):
             raise DominoConfigError(
