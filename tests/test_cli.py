@@ -11,7 +11,7 @@ def test_python_m_domino_runs_hydra_config(tmp_path):
     (tmp_path / "steps.py").write_text(
         textwrap.dedent(
             """
-            def hello(name):
+            def hello(name, **kwargs):
                 print(f"hello {name}")
                 return name
             """

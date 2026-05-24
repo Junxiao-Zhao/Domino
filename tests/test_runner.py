@@ -12,13 +12,13 @@ def write_steps(tmp_path):
     steps.write_text(
         textwrap.dedent(
             """
-            def make_base(work_dir):
+            def make_base(work_dir, **kwargs):
                 return f"{work_dir}/base"
 
-            def split_value(func1):
+            def split_value(func1, **kwargs):
                 return func1, len(func1)
 
-            def consume(value, size, missing):
+            def consume(value, size, missing=None, **kwargs):
                 return {"value": value, "size": size, "missing": missing}
 
             def fail():

@@ -81,24 +81,30 @@ callable signature and builds keyword arguments.
 Resolution order:
 
 1. Use the explicit step `kwargs` value when present.
-2. If the parameter name is `ctx`, pass the whole context mapping.
-3. Otherwise use the value from `ctx` when present.
-4. Otherwise pass `None`.
+2. Preserve all explicit step `kwargs`, even keys that are not declared in the
+   callable signature.
+3. If the parameter name is `ctx`, pass the whole context mapping.
+4. Otherwise use the value from `ctx` when present.
+5. Otherwise omit the parameter from the call.
 
 Variadic `*args` and `**kwargs` parameters are ignored by automatic binding.
+Because all explicit step `kwargs` are passed through unchanged, prefer defining
+workflow step functions with a `**kwargs` fallback when they may be called from
+shared or evolving configs. This prevents unrelated explicit config keys from
+causing `TypeError`.
 
 Examples:
 
 ```python
-def step_a(work_dir):
+def step_a(work_dir, **kwargs):
     return f"{work_dir}/result"
 
 
-def step_b(ctx):
+def step_b(ctx, **kwargs):
     return list(ctx)
 
 
-def step_c(value, missing):
+def step_c(value, missing=None, **kwargs):
     assert missing is None
     return value
 ```
@@ -110,8 +116,8 @@ Return values are written with `domino.context.store_result`.
 - If the function returns `None`, nothing is stored.
 - If `return_key` is null, the result is stored under the workflow step name.
 - If `return_key` is a string, the whole result is stored under that key.
-- If `return_key` is a list, the function must return a tuple of the same
-  length. Tuple items are stored under the matching keys.
+- If `return_key` is a list, the function must return a sequence of the same
+  length. Sequence items are stored under the matching keys.
 
 Invalid return-key combinations should raise `DominoConfigError`.
 
