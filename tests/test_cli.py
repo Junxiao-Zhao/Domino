@@ -55,4 +55,7 @@ def test_python_m_domino_runs_hydra_config(tmp_path):
     )
 
     assert completed.returncode == 0, completed.stderr
+    assert "ctx:" in completed.stdout
+    assert "name: Ada" in completed.stdout
+    assert "workflow:" in completed.stdout
     assert "hello Ada" in completed.stdout

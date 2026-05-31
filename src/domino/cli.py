@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Sequence
 
 from hydra import compose, initialize_config_dir
+from omegaconf import OmegaConf
 
 from domino.runner import run
 
@@ -18,6 +19,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     with initialize_config_dir(config_dir=str(config_dir.resolve()), version_base=None):
         cfg = compose(config_name=args.config_name, overrides=list(overrides))
 
+    print(OmegaConf.to_yaml(cfg, resolve=True))
     run(cfg)
 
 
