@@ -30,7 +30,9 @@ def write_steps(tmp_path):
     return steps
 
 
-def test_run_executes_workflow_in_order_and_returns_final_ctx(tmp_path, monkeypatch):
+def test_run_executes_workflow_in_order_and_returns_final_ctx(
+    tmp_path, monkeypatch, capsys
+):
     steps = write_steps(tmp_path)
     monkeypatch.chdir(tmp_path)
     cfg = OmegaConf.create(
@@ -68,6 +70,14 @@ def test_run_executes_workflow_in_order_and_returns_final_ctx(tmp_path, monkeypa
         "size": 999,
         "missing": None,
     }
+    assert capsys.readouterr().out.splitlines() == [
+        "Start running step func1...",
+        "Finish step func1.",
+        "Start running step func2...",
+        "Finish step func2.",
+        "Start running step func3...",
+        "Finish step func3.",
+    ]
 
 
 def test_run_requires_workflow_mapping():

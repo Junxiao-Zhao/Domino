@@ -22,6 +22,7 @@ def run(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
     ctx = dict(raw_ctx)
 
     for step_name, raw_step in workflow.items():
+        print(f"Start running step {step_name}...")
         if not isinstance(raw_step, Mapping):
             raise DominoConfigError(f"Workflow step '{step_name}' must be a mapping.")
 
@@ -48,6 +49,7 @@ def run(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
             ) from exc
 
         store_result(ctx, str(step_name), result, raw_step.get("return_key"))
+        print(f"Finish step {step_name}.")
 
     return ctx
 
