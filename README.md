@@ -34,6 +34,10 @@ workflow:
     return_key: ["base", "length"]
 ```
 
+Callable specs use `module:target`. The `module` side can be an importable
+module or a `.py` file path; the `target` side can be a callable attribute name
+or a dotted attribute path such as `client:pro.trade_cal`.
+
 Step function parameters are resolved from step `kwargs` first, then `ctx`.
 All step `kwargs` are passed through to the function; `ctx` only fills missing
 signature parameters.

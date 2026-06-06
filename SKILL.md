@@ -1,6 +1,6 @@
 ---
 name: domino-orchestrator
-description: Use when a project should use the domino Python library as a lightweight Hydra-configured serial workflow orchestrator, including creating workflow YAML configs, writing Python step functions, wiring ctx data flow, loading functions with module:func specs, and running workflows with domino or python -m domino.
+description: Use when a project should use the domino Python library as a lightweight Hydra-configured serial workflow orchestrator, including creating workflow YAML configs, writing Python step functions, wiring ctx data flow, loading callables with module:target specs, and running workflows with domino or python -m domino.
 ---
 
 # Domino Orchestrator
@@ -83,12 +83,13 @@ Workflow steps execute in YAML declaration order.
 
 Each step supports:
 
-- `callable`: required `module:func_name` string.
+- `callable`: required `module:target` string; `target` may be a dotted attribute path.
 - `kwargs`: optional explicit keyword arguments.
 - `return_key`: optional key, list of keys, or null.
 
 The `module` part can be an importable Python module or a `.py` file path.
-Relative file paths are resolved from the current working directory.
+Relative file paths are resolved from the current working directory. The
+`target` part can be a single callable attribute or a dotted attribute path.
 
 ## Step Function Pattern
 
@@ -163,7 +164,7 @@ workflow or calls the step functions with representative `ctx` values.
 
 Common failures:
 
-- `DominoLoadError`: the `callable` module path, module name, or function name is
+- `DominoLoadError`: the `callable` module path, module name, target path is
   wrong, or the target is not callable.
 - `DominoConfigError`: workflow config shape or `return_key` handling is invalid.
 - `TypeError`: a step function received explicit `kwargs` it does not accept; add

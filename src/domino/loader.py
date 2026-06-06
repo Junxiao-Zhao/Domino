@@ -14,23 +14,38 @@ def load_callable(spec: str) -> Any:
     if ":" not in spec:
         raise DominoLoadError(f"Callable spec '{spec}' must use 'module:func' format.")
 
-    module_name, func_name = spec.split(":", 1)
-    if not module_name or not func_name:
+    module_name, target_name = spec.split(":", 1)
+    if not module_name or not target_name:
         raise DominoLoadError(f"Callable spec '{spec}' must use 'module:func' format.")
 
     module = _load_module(module_name, spec)
-
-    try:
-        target = getattr(module, func_name)
-    except AttributeError as exc:
-        raise DominoLoadError(
-            f"Callable spec '{spec}' references missing function '{func_name}'."
-        ) from exc
+    target = _resolve_target(module, target_name, spec)
 
     if not callable(target):
         raise DominoLoadError(
             f"Callable spec '{spec}' resolved target is not callable."
         )
+
+    return target
+
+
+def _resolve_target(module: ModuleType, target_name: str, spec: str) -> Any:
+    target: Any = module
+    resolved_parts: list[str] = []
+
+    for part in target_name.split("."):
+        if not part:
+            raise DominoLoadError(
+                f"Callable spec '{spec}' must use 'module:func' format."
+            )
+        try:
+            target = getattr(target, part)
+        except AttributeError as exc:
+            missing_target = ".".join([*resolved_parts, part])
+            raise DominoLoadError(
+                f"Callable spec '{spec}' references missing function '{missing_target}'."
+            ) from exc
+        resolved_parts.append(part)
 
     return target
 
