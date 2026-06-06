@@ -8,9 +8,9 @@ These instructions apply to the whole repository.
 ## What Domino Does
 
 `domino` runs a configured workflow step by step. Each step names a Python
-callable with `module:func_name`, resolves that callable's arguments from a
+callable with `module:target`, resolves that callable's arguments from a
 shared context, executes the callable once, and stores any return value back
-into the context.
+into the context. The target may be a function name or a dotted attribute path.
 
 The project is intentionally small. Keep changes focused on:
 
@@ -69,7 +69,7 @@ workflow:
 
 `workflow` is executed in declaration order. Each step supports:
 
-- `callable`: required string in `module:func_name` form
+- `callable`: required string in `module:target` form; `target` may be dotted
 - `kwargs`: optional mapping; values here override values from `ctx`
 - `return_key`: optional string, list of strings, or null
 
@@ -125,13 +125,15 @@ Invalid return-key combinations should raise `DominoConfigError`.
 
 Use `domino.loader.load_callable` for dynamic loading.
 
-The callable spec must be `module:func_name`.
+The callable spec must be `module:target`.
 
 - If `module` resolves to an existing `.py` file path, load it from the
   filesystem.
 - Relative `.py` paths are resolved against the current working directory.
 - Otherwise, import `module` with `importlib.import_module`.
-- The named attribute must exist and be callable.
+- The `target` side may be a single callable attribute or a dotted attribute
+  path such as `api.fetch`.
+- The resolved target must exist and be callable.
 
 Loading failures should raise `DominoLoadError` with the original spec in the
 message.
