@@ -14,6 +14,141 @@ Do not use `domino` for DAG scheduling, parallel execution, retries, async
 execution, persistent state, or distributed orchestration unless those features
 are added explicitly.
 
+## Design Philosophy
+
+Domino is a lightweight serial workflow orchestrator. Its job is to make workflow
+structure explicit, readable, and configurable. A good Domino workflow shows the
+ordered operational steps in YAML, while Python provides reusable unit behavior.
+
+Core principle:
+
+> Workflow structure belongs in config. Reusable unit behavior belongs in Python.
+
+### Prefer Direct Callables
+
+Use the real callable whenever Domino can load it.
+
+Good:
+
+```yaml
+callable: "package.module:function"
+callable: "package.client:api.method"
+```
+
+Avoid wrapping a callable only to rename it, forward kwargs, adapt a dotted
+method, or preserve an old import path.
+
+A wrapper is justified only when it adds real behavior: validation,
+transformation, error handling, persistence, or a reusable policy that cannot be
+expressed cleanly through kwargs.
+
+### Keep Step Functions Atomic
+
+A Domino step should represent one conceptual operation at the workflow level.
+
+Good examples:
+
+- Fetch source data.
+- Build an output path.
+- Write raw data.
+- Merge records.
+- Validate a gap.
+- Write a manifest.
+- Summarize a result.
+
+Avoid a single Python function that internally performs a whole workflow such as
+fetch -> transform -> merge -> validate -> persist.
+
+### Use Kwargs For Variation
+
+If two workflow steps differ only by parameters, keep the same callable and pass
+different kwargs.
+
+Common examples include date ranges, entity ids, field lists, provider options,
+calendar policies, output labels, and storage partitions.
+
+Do not create separate wrapper functions or config files for differences that
+are only arguments.
+
+### Prefer One Config For One Workflow Shape
+
+If two runnable jobs have the same ordered steps and differ only by runtime
+values, they should usually share one config.
+
+Use config overrides for runtime differences. Split configs only when workflow
+shape, ownership boundary, or operational intent is genuinely different.
+
+### Make Component Workflows Self-Contained
+
+A runnable config should contain the complete `ctx` and complete ordered workflow
+needed to run that component.
+
+Avoid generic entrypoints that depend on many overrides or hidden composition
+layers when the project has clear components. Generic entrypoints are acceptable
+for small one-off projects, but they should not become an indirection layer over
+real workflows.
+
+### Keep Policies Reusable, Not Source-Specific
+
+When a workflow needs a reusable policy, model the policy directly.
+
+Good:
+
+```yaml
+callable: "quality:warn_if_gap"
+kwargs:
+  expected_dates: "calendar_provider:expected_dates"
+```
+
+Avoid separate policy functions for each data source unless the behavior is
+genuinely different. Prefer passing policy inputs or provider callables through
+kwargs.
+
+### Be Explicit With Third-Party APIs
+
+Some third-party callables expose generic signatures such as `**kwargs`, so
+Domino cannot infer parameters from `ctx`.
+
+In that case, pass required arguments explicitly in YAML. Do not wrap the
+third-party API only to create a nicer signature.
+
+### Avoid Compatibility Wrappers By Default
+
+Compatibility wrappers preserve old boundaries and make future refactors harder.
+
+Use them only when maintaining a stable public API is more important than
+clarity. In internal or early-stage projects, update configs and imports
+directly.
+
+### Test Architecture, Not Only Behavior
+
+If a project has repeatedly drifted toward hidden workflows or wrapper layers,
+add regression tests that scan active configs and source files for forbidden
+patterns.
+
+Useful architecture tests may guard against:
+
+- Generic workflow entrypoints returning after removal.
+- Local callable loaders duplicating Domino.
+- Wrapper callables replacing direct callables.
+- Split configs that differ only by kwargs.
+- Monolithic sync or run functions hiding workflows.
+
+### Decision Checklist
+
+Before adding a Domino step, function, or config, ask:
+
+- Can Domino call the real function directly?
+- Is this function hiding multiple workflow steps?
+- Is the difference only kwargs?
+- Does this config have the same workflow shape as an existing config?
+- Is this wrapper adding behavior, or only forwarding?
+- Would a future reader understand the workflow from YAML alone?
+- Should a regression test prevent this pattern from returning?
+
+If the answers point to direct callable + kwargs + explicit YAML, prefer that
+path.
+
 ## Setup In A Project
 
 Install `domino` in the target project environment:
