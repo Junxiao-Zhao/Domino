@@ -3,11 +3,63 @@ from __future__ import annotations
 import hashlib
 import importlib
 import importlib.util
+from collections.abc import Mapping
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 from domino.exceptions import DominoLoadError
+
+
+def resolve_callable(spec: str, ctx: Mapping[str, Any]) -> Any:
+    if spec.startswith("ctx:"):
+        return load_context_callable(spec, ctx)
+    return load_callable(spec)
+
+
+def load_context_callable(spec: str, ctx: Mapping[str, Any]) -> Any:
+    if ":" not in spec:
+        raise DominoLoadError(
+            f"Callable spec '{spec}' must use 'ctx:object.method' format."
+        )
+
+    namespace, target_name = spec.split(":", 1)
+    if namespace != "ctx" or not target_name:
+        raise DominoLoadError(
+            f"Callable spec '{spec}' must use 'ctx:object.method' format."
+        )
+
+    target_parts = target_name.split(".")
+    if any(not part for part in target_parts):
+        raise DominoLoadError(
+            f"Callable spec '{spec}' must use 'ctx:object.method' format."
+        )
+
+    root_name = target_parts[0]
+    if root_name not in ctx:
+        raise DominoLoadError(
+            f"Callable spec '{spec}' references missing context key '{root_name}'."
+        )
+
+    target: Any = ctx[root_name]
+    resolved_parts = [root_name]
+    for part in target_parts[1:]:
+        try:
+            target = getattr(target, part)
+        except AttributeError as exc:
+            missing_target = ".".join([*resolved_parts, part])
+            raise DominoLoadError(
+                f"Callable spec '{spec}' references missing context target "
+                f"'{missing_target}'."
+            ) from exc
+        resolved_parts.append(part)
+
+    if not callable(target):
+        raise DominoLoadError(
+            f"Callable spec '{spec}' resolved target is not callable."
+        )
+
+    return target
 
 
 def load_callable(spec: str) -> Any:

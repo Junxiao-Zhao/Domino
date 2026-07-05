@@ -21,6 +21,16 @@ def write_steps(tmp_path):
             def consume(value, size, missing=None, **kwargs):
                 return {"value": value, "size": size, "missing": missing}
 
+            class Client:
+                def fetch(self, value, **kwargs):
+                    return f"client:{value}"
+
+            def make_client(**kwargs):
+                return Client()
+
+            def make_name(**kwargs):
+                return "Ada"
+
             def fail():
                 raise RuntimeError("boom")
             """
@@ -83,6 +93,64 @@ def test_run_executes_workflow_in_order_and_returns_final_ctx(
 def test_run_requires_workflow_mapping():
     with pytest.raises(DominoConfigError, match="workflow"):
         run(OmegaConf.create({"ctx": {}}))
+
+
+def test_run_resolves_step_kwargs_with_runtime_ctx(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "workflow": {
+                "make_name": {
+                    "callable": f"{steps.name}:make_name",
+                    "kwargs": {},
+                    "return_key": "name",
+                },
+                "consume": {
+                    "callable": f"{steps.name}:consume",
+                    "kwargs": {"value": "${ctx.name}", "size": 3},
+                    "return_key": "result",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["result"]["value"] == "Ada"
+    assert ctx["result"]["size"] == 3
+
+
+def test_run_calls_method_from_runtime_ctx(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "workflow": {
+                "client": {
+                    "callable": f"{steps.name}:make_client",
+                    "kwargs": {},
+                    "return_key": "client",
+                },
+                "name": {
+                    "callable": f"{steps.name}:make_name",
+                    "kwargs": {},
+                    "return_key": "name",
+                },
+                "fetch": {
+                    "callable": "ctx:client.fetch",
+                    "kwargs": {"value": "${ctx.name}"},
+                    "return_key": "fetched",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["fetched"] == "client:Ada"
 
 
 def test_run_wraps_step_execution_errors(tmp_path, monkeypatch):

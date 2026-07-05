@@ -33,6 +33,7 @@ Good:
 ```yaml
 callable: "package.module:function"
 callable: "package.client:api.method"
+callable: "ctx:client.fetch"
 ```
 
 Avoid wrapping a callable only to rename it, forward kwargs, adapt a dotted
@@ -218,13 +219,21 @@ Workflow steps execute in YAML declaration order.
 
 Each step supports:
 
-- `callable`: required `module:target` string; `target` may be a dotted attribute path.
+- `callable`: required `module:target` or `ctx:object.method` string; normal
+  `target` values may be dotted attribute paths.
 - `kwargs`: optional explicit keyword arguments.
 - `return_key`: optional key, list of keys, or null.
 
-The `module` part can be an importable Python module or a `.py` file path.
-Relative file paths are resolved from the current working directory. The
-`target` part can be a single callable attribute or a dotted attribute path.
+For `module:target`, the `module` part can be an importable Python module or a
+`.py` file path. Relative file paths are resolved from the current working
+directory. The `target` part can be a single callable attribute or a dotted
+attribute path. Domino loads this form with `load_callable`.
+
+For `ctx:object.method`, Domino reads `object` from the current runtime `ctx`,
+then resolves the remaining dotted path with attribute access until it reaches a
+callable. Domino loads this form with `load_context_callable`. Workflow runners
+should use `resolve_callable` so the loader can dispatch between normal
+module/file callables and runtime-ctx callables.
 
 ## Step Function Pattern
 
@@ -251,6 +260,11 @@ Always consider adding `**kwargs` to workflow step functions. Domino passes all
 explicit step `kwargs` through unchanged, including keys not declared in the
 function signature. A `**kwargs` fallback prevents unrelated config keys from
 raising `TypeError` when configs are shared or evolve.
+
+If an explicit step `kwargs` value is written as `${ctx.some_key}`, Domino
+resolves it at the start of that step against the current runtime `ctx`. This is
+runtime resolution, so a step can reference values stored into `ctx` by earlier
+steps.
 
 Argument resolution:
 
@@ -304,3 +318,6 @@ Common failures:
 - `DominoConfigError`: workflow config shape or `return_key` handling is invalid.
 - `TypeError`: a step function received explicit `kwargs` it does not accept; add
   `**kwargs` or remove the extra config key.
+
+Do not commit `docs/plans`. Treat plan files as coordination artifacts outside
+the deliverable history.
