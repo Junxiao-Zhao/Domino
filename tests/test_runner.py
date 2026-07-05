@@ -31,6 +31,15 @@ def write_steps(tmp_path):
             def make_name(**kwargs):
                 return "Ada"
 
+            def make_literal(**kwargs):
+                return "${literal}"
+
+            def make_pair(**kwargs):
+                return ("left", "right")
+
+            def echo(value, **kwargs):
+                return value
+
             def fail():
                 raise RuntimeError("boom")
             """
@@ -151,6 +160,61 @@ def test_run_calls_method_from_runtime_ctx(tmp_path, monkeypatch):
     ctx = run(cfg)
 
     assert ctx["fetched"] == "client:Ada"
+
+
+def test_run_keeps_runtime_ctx_string_values_opaque(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "workflow": {
+                "make_literal": {
+                    "callable": f"{steps.name}:make_literal",
+                    "kwargs": {},
+                    "return_key": "token",
+                },
+                "echo": {
+                    "callable": f"{steps.name}:echo",
+                    "kwargs": {"value": "${ctx.token}"},
+                    "return_key": "echoed",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["token"] == "${literal}"
+    assert ctx["echoed"] == "${literal}"
+
+
+def test_run_keeps_runtime_ctx_tuple_values_opaque(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "workflow": {
+                "make_pair": {
+                    "callable": f"{steps.name}:make_pair",
+                    "kwargs": {},
+                    "return_key": "pair",
+                },
+                "echo": {
+                    "callable": f"{steps.name}:echo",
+                    "kwargs": {"value": "${ctx.pair}"},
+                    "return_key": "echoed",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["pair"] == ("left", "right")
+    assert ctx["echoed"] == ("left", "right")
+    assert isinstance(ctx["echoed"], tuple)
 
 
 def test_run_wraps_step_execution_errors(tmp_path, monkeypatch):
