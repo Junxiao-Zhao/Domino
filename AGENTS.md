@@ -8,9 +8,11 @@ These instructions apply to the whole repository.
 ## What Domino Does
 
 `domino` runs a configured workflow step by step. Each step names a Python
-callable with `module:target`, resolves that callable's arguments from a
-shared context, executes the callable once, and stores any return value back
-into the context. The target may be a function name or a dotted attribute path.
+callable, resolves that callable's arguments from a shared context, executes the
+callable once, and stores any return value back into the context. Normal
+callables use `module:target`; runtime-context callables use
+`ctx:object.method`, where `object` is read from the runtime `ctx` and the
+remaining dotted path is resolved as attributes to a callable.
 
 The project is intentionally small. Keep changes focused on:
 
@@ -69,9 +71,15 @@ workflow:
 
 `workflow` is executed in declaration order. Each step supports:
 
-- `callable`: required string in `module:target` form; `target` may be dotted
+- `callable`: required string in `module:target` or `ctx:object.method` form;
+  normal `target` values may be dotted
 - `kwargs`: optional mapping; values here override values from `ctx`
 - `return_key`: optional string, list of strings, or null
+
+Step `kwargs` may include `${ctx.xxx}` values. Resolve these at the start of
+each step against the current runtime context, not only against the initial
+Hydra-composed config. This allows later steps to reference values written to
+`ctx` by earlier steps.
 
 ## Step Function Rules
 
@@ -123,9 +131,11 @@ Invalid return-key combinations should raise `DominoConfigError`.
 
 ## Callable Loading Rules
 
-Use `domino.loader.load_callable` for dynamic loading.
+Use `domino.loader.resolve_callable` from the runner so callable dispatch stays
+centralized.
 
-The callable spec must be `module:target`.
+Normal callable specs use `module:target` and are loaded by
+`domino.loader.load_callable`.
 
 - If `module` resolves to an existing `.py` file path, load it from the
   filesystem.
@@ -134,6 +144,11 @@ The callable spec must be `module:target`.
 - The `target` side may be a single callable attribute or a dotted attribute
   path such as `api.fetch`.
 - The resolved target must exist and be callable.
+
+Runtime-context callable specs use `ctx:object.method` and are loaded by
+`domino.loader.load_context_callable`. The first path segment after `ctx:` is a
+key in the current runtime `ctx`; each remaining segment is resolved with
+attribute access. The final resolved object must be callable.
 
 Loading failures should raise `DominoLoadError` with the original spec in the
 message.
@@ -206,3 +221,5 @@ pytest -q
   spec that failed.
 - Avoid committing generated files such as `__pycache__/`, `.pytest_cache/`,
   `*.egg-info/`, `build/`, and `dist/`.
+- Never commit `docs/plans`; planning files are coordination artifacts and must
+  stay out of commits.
