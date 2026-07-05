@@ -10,7 +10,7 @@ from domino.context import build_step_kwargs, store_result
 from domino.exceptions import DominoConfigError, DominoExecutionError
 from domino.loader import resolve_callable
 
-_CTX_INTERPOLATION_PATTERN = re.compile(r"\$\{ctx\.([^}:]+)\}")
+_CTX_INTERPOLATION_PATTERN = re.compile(r"(?<!\\)\$\{ctx\.([^}:]+)\}")
 
 
 def run(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
@@ -92,7 +92,6 @@ def _resolve_step(
         )
 
     resolver_name = f"_domino_ctx_{id(ctx)}_{id(raw_step)}"
-    transformed_kwargs = _rewrite_ctx_interpolations(raw_kwargs, resolver_name)
 
     def resolve_ctx_reference(path: str) -> Any:
         return _select_ctx_value(ctx, path, step_name)
@@ -103,12 +102,7 @@ def _resolve_step(
         replace=True,
         use_cache=False,
     )
-    runtime_config = dict(config)
-    runtime_workflow = dict(workflow)
-    runtime_step = dict(raw_step)
-    runtime_step["kwargs"] = transformed_kwargs
-    runtime_workflow[step_name] = runtime_step
-    runtime_config["workflow"] = runtime_workflow
+    runtime_config = _rewrite_ctx_interpolations(config, resolver_name)
 
     try:
         runtime_cfg = OmegaConf.create(runtime_config, flags={"allow_objects": True})

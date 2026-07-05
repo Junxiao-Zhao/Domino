@@ -131,6 +131,34 @@ def test_run_resolves_step_kwargs_with_runtime_ctx(tmp_path, monkeypatch):
     assert ctx["result"]["size"] == 3
 
 
+def test_run_resolves_indirect_step_kwargs_with_runtime_ctx(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "name_ref": "${ctx.name}",
+            "workflow": {
+                "make_name": {
+                    "callable": f"{steps.name}:make_name",
+                    "kwargs": {},
+                    "return_key": "name",
+                },
+                "consume": {
+                    "callable": f"{steps.name}:consume",
+                    "kwargs": {"value": "${name_ref}", "size": 3},
+                    "return_key": "result",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["result"]["value"] == "Ada"
+    assert ctx["result"]["size"] == 3
+
+
 def test_run_calls_method_from_runtime_ctx(tmp_path, monkeypatch):
     steps = write_steps(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -215,6 +243,27 @@ def test_run_keeps_runtime_ctx_tuple_values_opaque(tmp_path, monkeypatch):
     assert ctx["pair"] == ("left", "right")
     assert ctx["echoed"] == ("left", "right")
     assert isinstance(ctx["echoed"], tuple)
+
+
+def test_run_preserves_escaped_ctx_interpolation_literals(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "workflow": {
+                "echo": {
+                    "callable": f"{steps.name}:echo",
+                    "kwargs": {"value": r"\${ctx.name}"},
+                    "return_key": "echoed",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["echoed"] == "${ctx.name}"
 
 
 def test_run_wraps_step_execution_errors(tmp_path, monkeypatch):
