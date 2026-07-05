@@ -31,6 +31,9 @@ def write_steps(tmp_path):
             def make_name(**kwargs):
                 return "Ada"
 
+            def make_other_name(**kwargs):
+                return "Bob"
+
             def make_literal(**kwargs):
                 return "${literal}"
 
@@ -159,6 +162,46 @@ def test_run_resolves_indirect_step_kwargs_with_runtime_ctx(tmp_path, monkeypatc
     assert ctx["result"]["size"] == 3
 
 
+def test_run_reuses_indirect_ctx_reference_with_latest_runtime_ctx(
+    tmp_path, monkeypatch
+):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "name_ref": "${ctx.name}",
+            "workflow": {
+                "make_name": {
+                    "callable": f"{steps.name}:make_name",
+                    "kwargs": {},
+                    "return_key": "name",
+                },
+                "first": {
+                    "callable": f"{steps.name}:consume",
+                    "kwargs": {"value": "${name_ref}", "size": 3},
+                    "return_key": "first_result",
+                },
+                "make_other_name": {
+                    "callable": f"{steps.name}:make_other_name",
+                    "kwargs": {},
+                    "return_key": "name",
+                },
+                "second": {
+                    "callable": f"{steps.name}:consume",
+                    "kwargs": {"value": "${name_ref}", "size": 3},
+                    "return_key": "second_result",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["first_result"]["value"] == "Ada"
+    assert ctx["second_result"]["value"] == "Bob"
+
+
 def test_run_calls_method_from_runtime_ctx(tmp_path, monkeypatch):
     steps = write_steps(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -264,6 +307,56 @@ def test_run_preserves_escaped_ctx_interpolation_literals(tmp_path, monkeypatch)
     ctx = run(cfg)
 
     assert ctx["echoed"] == "${ctx.name}"
+
+
+def test_run_preserves_escaped_indirect_ctx_interpolation_literals(
+    tmp_path, monkeypatch
+):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "name_ref": r"\${ctx.name}",
+            "workflow": {
+                "echo": {
+                    "callable": f"{steps.name}:echo",
+                    "kwargs": {"value": "${name_ref}"},
+                    "return_key": "echoed",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["echoed"] == "${ctx.name}"
+
+
+def test_run_passes_runtime_ctx_object_values_through_kwargs(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "workflow": {
+                "client": {
+                    "callable": f"{steps.name}:make_client",
+                    "kwargs": {},
+                    "return_key": "client",
+                },
+                "echo": {
+                    "callable": f"{steps.name}:echo",
+                    "kwargs": {"value": "${ctx.client}"},
+                    "return_key": "echoed",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["echoed"] is ctx["client"]
 
 
 def test_run_wraps_step_execution_errors(tmp_path, monkeypatch):

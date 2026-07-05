@@ -21,37 +21,46 @@ def run(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
 
     ctx = _initial_ctx(cfg)
 
-    for step_name, raw_step in workflow.items():
-        print(f"Start running step {step_name}...")
-        if not isinstance(raw_step, Mapping):
-            raise DominoConfigError(f"Workflow step '{step_name}' must be a mapping.")
+    step_state: dict[str, Any] = {"step_name": None}
+    runtime_cfg, resolver_name = _runtime_config(config, ctx, step_state)
+    try:
+        for step_name, raw_step in workflow.items():
+            print(f"Start running step {step_name}...")
+            if not isinstance(raw_step, Mapping):
+                raise DominoConfigError(
+                    f"Workflow step '{step_name}' must be a mapping."
+                )
 
-        step = _resolve_step(config, step_name, ctx)
+            step_state["step_name"] = step_name
+            step = _resolve_step(runtime_cfg, step_name)
 
-        callable_spec = step.get("callable")
-        if not isinstance(callable_spec, str) or not callable_spec:
-            raise DominoConfigError(
-                f"Workflow step '{step_name}' must define callable."
-            )
+            callable_spec = step.get("callable")
+            if not isinstance(callable_spec, str) or not callable_spec:
+                raise DominoConfigError(
+                    f"Workflow step '{step_name}' must define callable."
+                )
 
-        kwargs = step.get("kwargs") or {}
-        if not isinstance(kwargs, Mapping):
-            raise DominoConfigError(
-                f"Workflow step '{step_name}' kwargs must be a mapping."
-            )
+            kwargs = step.get("kwargs") or {}
+            if not isinstance(kwargs, Mapping):
+                raise DominoConfigError(
+                    f"Workflow step '{step_name}' kwargs must be a mapping."
+                )
 
-        func = resolve_callable(callable_spec, ctx)
-        call_kwargs = build_step_kwargs(func, ctx, kwargs)
+            func = resolve_callable(callable_spec, ctx)
+            call_kwargs = build_step_kwargs(func, ctx, kwargs)
 
-        try:
-            result = func(**call_kwargs)
-        except Exception as exc:
-            raise DominoExecutionError(
-                f"Workflow step '{step_name}' failed while executing '{callable_spec}'."
-            ) from exc
+            try:
+                result = func(**call_kwargs)
+            except Exception as exc:
+                raise DominoExecutionError(
+                    f"Workflow step '{step_name}' failed while executing "
+                    f"'{callable_spec}'."
+                ) from exc
 
-        store_result(ctx, str(step_name), result, step.get("return_key"))
-        print(f"Finish step {step_name}.")
+            store_result(ctx, str(step_name), result, step.get("return_key"))
+            print(f"Finish step {step_name}.")
+    finally:
+        OmegaConf.clear_resolver(resolver_name)
 
     return ctx
 
@@ -72,28 +81,15 @@ def _initial_ctx(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
     return dict(container)
 
 
-def _resolve_step(
+def _runtime_config(
     config: Mapping[str, Any],
-    step_name: Any,
     ctx: Mapping[str, Any],
-) -> dict[str, Any]:
-    workflow = config.get("workflow")
-    if not isinstance(workflow, Mapping):
-        raise DominoConfigError("Config must define workflow as a mapping.")
-
-    raw_step = workflow[step_name]
-    if not isinstance(raw_step, Mapping):
-        raise DominoConfigError(f"Workflow step '{step_name}' must be a mapping.")
-
-    raw_kwargs = raw_step.get("kwargs") or {}
-    if not isinstance(raw_kwargs, Mapping):
-        raise DominoConfigError(
-            f"Workflow step '{step_name}' kwargs must be a mapping."
-        )
-
-    resolver_name = f"_domino_ctx_{id(ctx)}_{id(raw_step)}"
+    step_state: Mapping[str, Any],
+) -> tuple[Any, str]:
+    resolver_name = f"_domino_ctx_{id(ctx)}"
 
     def resolve_ctx_reference(path: str) -> Any:
+        step_name = step_state["step_name"]
         return _select_ctx_value(ctx, path, step_name)
 
     OmegaConf.register_new_resolver(
@@ -102,17 +98,21 @@ def _resolve_step(
         replace=True,
         use_cache=False,
     )
-    runtime_config = _rewrite_ctx_interpolations(config, resolver_name)
-
     try:
+        runtime_config = _rewrite_ctx_interpolations(config, resolver_name)
         runtime_cfg = OmegaConf.create(runtime_config, flags={"allow_objects": True})
-        resolved_step = OmegaConf.to_container(
-            runtime_cfg["workflow"][step_name],
-            resolve=True,
-        )
-    finally:
+    except Exception:
         OmegaConf.clear_resolver(resolver_name)
+        raise
 
+    return runtime_cfg, resolver_name
+
+
+def _resolve_step(runtime_cfg: Any, step_name: Any) -> dict[str, Any]:
+    resolved_step = OmegaConf.to_container(
+        runtime_cfg["workflow"][step_name],
+        resolve=True,
+    )
     if not isinstance(resolved_step, dict):
         raise DominoConfigError(f"Workflow step '{step_name}' must be a mapping.")
 
