@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from omegaconf import DictConfig, OmegaConf
+from omegaconf.errors import InterpolationResolutionError, OmegaConfBaseException
 
 from domino.context import build_step_kwargs, store_result
 from domino.exceptions import DominoConfigError, DominoExecutionError
@@ -15,15 +16,12 @@ _CTX_INTERPOLATION_PATTERN = re.compile(r"(?<!\\)\$\{ctx\.([^}:]+)\}")
 
 def run(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
     config = _to_container(cfg, resolve=False)
-    workflow = config.get("workflow")
-    if not isinstance(workflow, Mapping):
-        raise DominoConfigError("Config must define workflow as a mapping.")
-
     ctx = _initial_ctx(cfg)
 
     step_state: dict[str, Any] = {"step_name": None}
     runtime_cfg, resolver_name = _runtime_config(config, ctx, step_state)
     try:
+        workflow = _workflow(runtime_cfg)
         for step_name, raw_step in workflow.items():
             print(f"Start running step {step_name}...")
             if not isinstance(raw_step, Mapping):
@@ -63,6 +61,18 @@ def run(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
         OmegaConf.clear_resolver(resolver_name)
 
     return ctx
+
+
+def _workflow(runtime_cfg: Any) -> Mapping[Any, Any]:
+    try:
+        workflow = runtime_cfg.get("workflow")
+    except OmegaConfBaseException as exc:
+        raise DominoConfigError("Config must define workflow as a mapping.") from exc
+
+    if not isinstance(workflow, Mapping):
+        raise DominoConfigError("Config must define workflow as a mapping.")
+
+    return workflow
 
 
 def _initial_ctx(cfg: DictConfig | Mapping[str, Any]) -> dict[str, Any]:
@@ -109,10 +119,14 @@ def _runtime_config(
 
 
 def _resolve_step(runtime_cfg: Any, step_name: Any) -> dict[str, Any]:
-    resolved_step = OmegaConf.to_container(
-        runtime_cfg["workflow"][step_name],
-        resolve=True,
-    )
+    try:
+        resolved_step = OmegaConf.to_container(
+            runtime_cfg["workflow"][step_name],
+            resolve=True,
+        )
+    except InterpolationResolutionError as exc:
+        raise DominoConfigError(str(exc)) from exc
+
     if not isinstance(resolved_step, dict):
         raise DominoConfigError(f"Workflow step '{step_name}' must be a mapping.")
 

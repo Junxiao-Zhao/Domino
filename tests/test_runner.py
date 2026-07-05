@@ -107,6 +107,60 @@ def test_run_requires_workflow_mapping():
         run(OmegaConf.create({"ctx": {}}))
 
 
+def test_run_resolves_workflow_mapping_interpolation(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "workflow_template": {
+                "make_name": {
+                    "callable": f"{steps.name}:make_name",
+                    "kwargs": {},
+                    "return_key": "name",
+                },
+                "consume": {
+                    "callable": f"{steps.name}:consume",
+                    "kwargs": {"value": "${ctx.name}", "size": 3},
+                    "return_key": "result",
+                },
+            },
+            "workflow": "${workflow_template}",
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["result"]["value"] == "Ada"
+
+
+def test_run_resolves_step_mapping_interpolation(tmp_path, monkeypatch):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "make_name_step": {
+                "callable": f"{steps.name}:make_name",
+                "kwargs": {},
+                "return_key": "name",
+            },
+            "workflow": {
+                "make_name": "${make_name_step}",
+                "consume": {
+                    "callable": f"{steps.name}:consume",
+                    "kwargs": {"value": "${ctx.name}", "size": 3},
+                    "return_key": "result",
+                },
+            },
+        }
+    )
+
+    ctx = run(cfg)
+
+    assert ctx["result"]["value"] == "Ada"
+
+
 def test_run_resolves_step_kwargs_with_runtime_ctx(tmp_path, monkeypatch):
     steps = write_steps(tmp_path)
     monkeypatch.chdir(tmp_path)
@@ -357,6 +411,28 @@ def test_run_passes_runtime_ctx_object_values_through_kwargs(tmp_path, monkeypat
     ctx = run(cfg)
 
     assert ctx["echoed"] is ctx["client"]
+
+
+def test_run_reports_missing_runtime_ctx_reference_as_domino_config_error(
+    tmp_path, monkeypatch
+):
+    steps = write_steps(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    cfg = OmegaConf.create(
+        {
+            "ctx": {},
+            "workflow": {
+                "echo": {
+                    "callable": f"{steps.name}:echo",
+                    "kwargs": {"value": "${ctx.missing}"},
+                    "return_key": "echoed",
+                },
+            },
+        }
+    )
+
+    with pytest.raises(DominoConfigError, match="ctx.missing"):
+        run(cfg)
 
 
 def test_run_wraps_step_execution_errors(tmp_path, monkeypatch):
